@@ -73,6 +73,7 @@ func (a *APIWrapper) createFile(
 		call.Media(bytes.NewReader([]byte{}))
 	}
 
+	RateLimit()
 	file, err := call.Do()
 
 	if err == nil {
@@ -101,6 +102,7 @@ func (a *APIWrapper) renameFile(file *drive.File, targetFolder *drive.File, targ
 			AddParents(targetFolder.Id)
 	}
 
+	RateLimit()
 	_, err := call.Do()
 
 	if err != nil {
@@ -121,9 +123,11 @@ func (a *APIWrapper) deleteFile(file *drive.File, trash bool) error {
 
 	if trash {
 		a.calling("Files.Update")
+		RateLimit()
 		_, err = a.srv.Files.Update(file.Id, &drive.File{Trashed: true}).SupportsAllDrives(true).Do()
 	} else {
 		a.calling("Files.Delete")
+		RateLimit()
 		err = a.srv.Files.Delete(file.Id).SupportsAllDrives(true).Do()
 	}
 
@@ -178,5 +182,6 @@ func (a *APIWrapper) _getFileByFolderAndName(
 	query := fmt.Sprintf("'%s' in parents and name='%s' and trashed = false", folderID, sanitizeName(fileName))
 	call := a.srv.Files.List().Q(query).Fields(fields).SupportsAllDrives(true).IncludeItemsFromAllDrives(true)
 
+	RateLimit()
 	return call.Do()
 }

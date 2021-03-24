@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"golang.org/x/oauth2"
+	drv "github.com/jonny5532/afero-gdrive"
 )
 
 // AuthenticateFunc defines the signature of the authentication function used
@@ -61,6 +62,7 @@ func (auth *Auth) NewHTTPClient(ctx context.Context, scopes ...string) (*http.Cl
 func (auth *Auth) getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 
+	drv.RateLimit()
 	code, err := auth.Authenticate(authURL)
 	if err != nil {
 		return nil, fmt.Errorf("authenticate error: %w", err)

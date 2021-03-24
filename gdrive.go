@@ -81,6 +81,28 @@ func sharedInit() {
 	}
 }
 
+var mutex sync.Mutex
+var queryTimes []int64
+func RateLimit() {
+	mutex.Lock()
+
+	const MAX_API_CALLS_PER_SECOND = 4
+
+	queryTimes = append(queryTimes, time.Now().UnixNano())
+
+	if len(queryTimes)>=MAX_API_CALLS_PER_SECOND {
+		elapsed := queryTimes[len(queryTimes)-1] - queryTimes[len(queryTimes)-MAX_API_CALLS_PER_SECOND]
+		queryTimes = queryTimes[len(queryTimes)-MAX_API_CALLS_PER_SECOND:]
+
+		if elapsed<1000000000 {
+			time.Sleep(time.Duration(1000000000-elapsed) * time.Nanosecond)
+			queryTimes[len(queryTimes)-1] = time.Now().UnixNano()
+		}
+	}
+	
+	mutex.Unlock()
+}
+
 // New creates a new Google Drive driver, client must me an authenticated instance for google drive
 func New(client *http.Client, opts ...Option) (*GDriver, error) {
 	sharedInitOnce.Do(sharedInit)
@@ -181,6 +203,7 @@ func (d *GDriver) listDirectory(f *File, count int) ([]os.FileInfo, error) {
 			call = call.PageToken(f.dirListToken)
 		}
 
+		RateLimit();
 		descendants, err := call.Do()
 		if err != nil {
 			return nil, &DriveAPICallError{Err: err}
@@ -362,6 +385,7 @@ func (d *GDriver) getFileWriter(fi *FileInfo) (io.WriteCloser, chan error, error
 			)
 		}
 
+		RateLimit()
 		_, err := d.srv.Files.Update(fi.file.Id, nil).Fields(fileInfoFields...).SupportsAllDrives(true).Media(reader).Do()
 
 		endErr <- err
@@ -467,6 +491,7 @@ func (d *GDriver) Rename(oldPath, newPath string) error {
 		}
 	}
 
+	RateLimit()
 	_, err = d.srv.Files.Update(file.file.Id, &drive.File{
 		Name: sanitizeName(pathParts[amountOfParts-1]),
 	}).
@@ -499,6 +524,7 @@ func (d *GDriver) ListTrash(filePath string, _ int) ([]*FileInfo, error) {
 	}
 
 	// no directories specified
+	RateLimit()
 	files, err := d.srv.Files.List().Q("trashed = true").Fields(
 		googleapi.Field(fmt.Sprintf("files(%s,parents)", googleapi.CombineFields(fileInfoFields))),
 	).SupportsAllDrives(true).IncludeItemsFromAllDrives(true).Do()
@@ -555,6 +581,7 @@ func isInRoot(srv *drive.Service, rootID string, file *drive.File, basePath stri
 			return true, basePath, nil
 		}
 
+		RateLimit()
 		parent, err := srv.Files.Get(parentID).Fields("id,name,parents").SupportsAllDrives(true).Do()
 		if err != nil {
 			return false, "", &DriveAPICallError{Err: err}
@@ -767,6 +794,7 @@ func (d *GDriver) Chmod(path string, mode os.FileMode) error {
 		return err
 	}
 
+	RateLimit()
 	_, err = d.srv.Files.Update(fi.file.Id, &drive.File{
 		Properties: map[string]string{
 			"ftp_file_mode": fmt.Sprintf("%d", mode),
@@ -787,6 +815,7 @@ func (d *GDriver) Chtimes(path string, atime time.Time, mTime time.Time) error {
 		return err
 	}
 
+	RateLimit()
 	_, err = d.srv.Files.Update(fi.file.Id, &drive.File{
 		ViewedByMeTime: atime.Format(time.RFC3339),
 		ModifiedTime:   mTime.Format(time.RFC3339),
