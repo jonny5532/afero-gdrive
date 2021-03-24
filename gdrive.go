@@ -17,8 +17,8 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
-	"github.com/fclairamb/afero-gdrive/iohelper"
-	"github.com/fclairamb/afero-gdrive/log"
+	"github.com/jonny5532/afero-gdrive/iohelper"
+	"github.com/jonny5532/afero-gdrive/log"
 )
 
 // WriteBufferType defines the type of buffer we want to use to read & write files

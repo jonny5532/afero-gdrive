@@ -1,4 +1,4 @@
-module github.com/fclairamb/afero-gdrive
+module github.com/jonny5532/afero-gdrive
 
 go 1.12
 
