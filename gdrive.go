@@ -38,6 +38,7 @@ const (
 // GDriver can be used to access google drive in a traditional File-folder-path pattern
 type GDriver struct {
 	srv                 *drive.Service
+	rootNodeId			string
 	rootNode            *FileInfo
 	Logger              log.Logger
 	LogReaderAndWriters bool
@@ -120,11 +121,16 @@ func (d *GDriver) AsAfero() afero.Fs {
 	return d
 }
 
+func (d *GDriver) SetRootNode(id string) error {
+	d.rootNodeId = id
+	return nil
+}
+
 // SetRootDirectory changes the working root directory
 // use this if you want to do certain operations in a special directory
 // path should always be the absolute real path
 func (d *GDriver) SetRootDirectory(path string) (*FileInfo, error) {
-	rootNode, err := getRootNode(d.srv)
+	rootNode, err := getRootNode(d.srv, d.rootNodeId)
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve Drive root: %w", err)
 	}
@@ -166,6 +172,8 @@ func (d *GDriver) listDirectory(f *File, count int) ([]os.FileInfo, error) {
 		call := d.srv.Files.List().
 			Q(fmt.Sprintf("'%s' in parents and trashed = false", f.FileInfo.file.Id)).
 			Fields(append(listFields, "nextPageToken")...).
+			SupportsAllDrives(true).
+			IncludeItemsFromAllDrives(true).
 			OrderBy("name").
 			PageSize(pageSize)
 
@@ -320,7 +328,7 @@ func (d *GDriver) getFileReader(fi *FileInfo, offset int64) (io.ReadCloser, erro
 		return nil, FileIsDirectoryError{Path: fi.Path()}
 	}
 
-	request := d.srv.Files.Get(fi.file.Id)
+	request := d.srv.Files.Get(fi.file.Id).SupportsAllDrives(true)
 
 	if offset > 0 {
 		request.Header().Set("Range", fmt.Sprintf("bytes=%d-", offset))
@@ -354,7 +362,7 @@ func (d *GDriver) getFileWriter(fi *FileInfo) (io.WriteCloser, chan error, error
 			)
 		}
 
-		_, err := d.srv.Files.Update(fi.file.Id, nil).Fields(fileInfoFields...).Media(reader).Do()
+		_, err := d.srv.Files.Update(fi.file.Id, nil).Fields(fileInfoFields...).SupportsAllDrives(true).Media(reader).Do()
 
 		endErr <- err
 
@@ -464,7 +472,7 @@ func (d *GDriver) Rename(oldPath, newPath string) error {
 	}).
 		AddParents(parentNode.file.Id).
 		RemoveParents(path.Join(file.file.Parents...)).
-		Fields(fileInfoFields...).Do()
+		Fields(fileInfoFields...).SupportsAllDrives(true).Do()
 
 	if err != nil {
 		return &DriveAPICallError{Err: err}
@@ -493,7 +501,7 @@ func (d *GDriver) ListTrash(filePath string, _ int) ([]*FileInfo, error) {
 	// no directories specified
 	files, err := d.srv.Files.List().Q("trashed = true").Fields(
 		googleapi.Field(fmt.Sprintf("files(%s,parents)", googleapi.CombineFields(fileInfoFields))),
-	).Do()
+	).SupportsAllDrives(true).IncludeItemsFromAllDrives(true).Do()
 	if err != nil {
 		return nil, &DriveAPICallError{Err: err}
 	}
@@ -521,8 +529,15 @@ func (d *GDriver) ListTrash(filePath string, _ int) ([]*FileInfo, error) {
 	return list, nil
 }
 
-func getRootNode(srv *drive.Service) (*FileInfo, error) {
-	root, err := srv.Files.Get("root").Fields(fileInfoFields...).Do()
+func getRootNode(srv *drive.Service, rootNodeId string) (*FileInfo, error) {
+	if rootNodeId=="" {
+		rootNodeId = "root"
+	}
+	root, err := srv.Files.Get(rootNodeId).
+		Fields(fileInfoFields...).
+		SupportsAllDrives(true).
+		Do()
+
 	if err != nil {
 		return nil, &DriveAPICallError{Err: err}
 	}
@@ -540,7 +555,7 @@ func isInRoot(srv *drive.Service, rootID string, file *drive.File, basePath stri
 			return true, basePath, nil
 		}
 
-		parent, err := srv.Files.Get(parentID).Fields("id,name,parents").Do()
+		parent, err := srv.Files.Get(parentID).Fields("id,name,parents").SupportsAllDrives(true).Do()
 		if err != nil {
 			return false, "", &DriveAPICallError{Err: err}
 		}
@@ -756,7 +771,7 @@ func (d *GDriver) Chmod(path string, mode os.FileMode) error {
 		Properties: map[string]string{
 			"ftp_file_mode": fmt.Sprintf("%d", mode),
 		},
-	}).Do()
+	}).SupportsAllDrives(true).Do()
 
 	if err != nil {
 		return &DriveAPICallError{Err: err}
@@ -776,7 +791,7 @@ func (d *GDriver) Chtimes(path string, atime time.Time, mTime time.Time) error {
 		ViewedByMeTime: atime.Format(time.RFC3339),
 		ModifiedTime:   mTime.Format(time.RFC3339),
 		// ModifiedByMeTime: mTime.Format(time.RFC3339),
-	}).Do()
+	}).SupportsAllDrives(true).Do()
 
 	if err != nil {
 		return &DriveAPICallError{Err: err}

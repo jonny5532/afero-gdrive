@@ -67,7 +67,7 @@ func (a *APIWrapper) createFile(
 		Parents: []string{
 			folderID,
 		},
-	}).Fields(fields...)
+	}).Fields(fields...).SupportsAllDrives(true)
 
 	if mimeType != mimeTypeFolder {
 		call.Media(bytes.NewReader([]byte{}))
@@ -93,7 +93,7 @@ func (a *APIWrapper) renameFile(file *drive.File, targetFolder *drive.File, targ
 		&drive.File{
 			Name: sanitizeName(targetName),
 		},
-	)
+	).SupportsAllDrives(true)
 
 	if file.Parents[0] != targetFolder.Id {
 		call = call.
@@ -121,10 +121,10 @@ func (a *APIWrapper) deleteFile(file *drive.File, trash bool) error {
 
 	if trash {
 		a.calling("Files.Update")
-		_, err = a.srv.Files.Update(file.Id, &drive.File{Trashed: true}).Do()
+		_, err = a.srv.Files.Update(file.Id, &drive.File{Trashed: true}).SupportsAllDrives(true).Do()
 	} else {
 		a.calling("Files.Delete")
-		err = a.srv.Files.Delete(file.Id).Do()
+		err = a.srv.Files.Delete(file.Id).SupportsAllDrives(true).Do()
 	}
 
 	if err != nil {
@@ -176,7 +176,7 @@ func (a *APIWrapper) _getFileByFolderAndName(
 	a.calling("Files.List")
 
 	query := fmt.Sprintf("'%s' in parents and name='%s' and trashed = false", folderID, sanitizeName(fileName))
-	call := a.srv.Files.List().Q(query).Fields(fields)
+	call := a.srv.Files.List().Q(query).Fields(fields).SupportsAllDrives(true).IncludeItemsFromAllDrives(true)
 
 	return call.Do()
 }

@@ -10,3 +10,15 @@ func RootDirectory(path string) Option {
 		return err
 	}
 }
+
+// RootNodeId sets the root directory for all operations
+func RootNode(id string) Option {
+	return func(driver *GDriver) error {
+		err := driver.SetRootNode(id)
+		if err != nil {
+			return err
+		}
+		_, err = driver.SetRootDirectory("")
+		return err
+	}
+}
